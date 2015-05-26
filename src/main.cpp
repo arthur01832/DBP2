@@ -933,8 +933,11 @@ void select (lua_State* L)
 			
 		}
 	}
-	// There is two table which is selected.
-	
+	/*	There is two table which is selected and It is going to do inner join.
+	*	First, we find the select attribute.
+	*	Second, based on the inner join condition, we find the attribute which is corresponding to the condition and insert.
+	*	Third, we print the table.
+	*/
 	else if(From_table_name.size() == 2){
 		set<string> attrname_tmp_fir(currtable->attrname.begin(),currtable->attrname.end());
 		set<string> attrname_tmp_sec(currtable_sec->attrname.begin(),currtable_sec->attrname.end());
@@ -948,17 +951,16 @@ void select (lua_State* L)
 					cout << "the attribute: "<< tmp <<" “authorId” is ambiguous, as it appears in both table";
 					return;
 				}
+				
 				if (attrname_tmp_fir.find(tmp)!=attrname_tmp_fir.end()){
 					target_list.push_back(tmp);
 					int value = currtable-> attrsize[tmp];
 					target_size.push_back(value);
-				}
-				else if (attrname_tmp_sec.find(tmp)!=attrname_tmp_sec.end()){
+				}else if (attrname_tmp_sec.find(tmp)!=attrname_tmp_sec.end()){
 					target_list.push_back(tmp);
 					int value = currtable_sec-> attrsize[tmp];
 					target_size.push_back(value);
-				}else
-				{
+				}else{
 					cout << "error: ";
 					cout <<" The Selected element" << tmp <<" doesn't exist in the table"<<endl;
 					return;
@@ -988,7 +990,6 @@ void select (lua_State* L)
 					if (alias_name_to_table.find(tmp_alias)!=alias_name_to_table.end()){
 						string which_table;
 						which_table = alias_name_to_table.find(tmp_alias)->second;
-						cout <<"Which table's name:"<< which_table;
 						currtable_tmp = tables[which_table];
 						target_list.push_back(SEL_target[i]);
 						string tmp_combine = SEL_alias[i] +"."+ SEL_target[i];
@@ -1021,23 +1022,81 @@ void select (lua_State* L)
 		}else{
 			selecttable = new_table(target_list,target_size);
 		}
-		print_table(selecttable);
 		
-		// if the logical_op's size equal to 0, it means that user only define one where condition. 
-		if(logical_op.size()==0){
-			string tmp_alias = where_condition_first_alias[0];
-			string which_table = alias_name_to_table.find(tmp_alias)->second;
-			currtable = tables[which_table];
-			string tmp_attr_fir = where_condition_first_attrname[0];
-			int value_fir = currtable-> attrsize[tmp_attr_fir];
-			string tmp_alias_sec = compare_alias_char_first[0];
-			string which_table = alias_name_to_table.find(tmp_alias_sec)->second;
-			currtable_sec = tables[which_table];
-			string tmp_attr_sec = compare_attr_char_first[0];
-			int value_sec = currtable_sec-> attrsize[tmp_attr_sec];
+		vector<int> inner_join_tmp_i;
+		vector<string> inner_join_tmp_v;
+		vector<int> compare_inner_join_i;
+		vector<string> compare_inner_join_v;
+		
+		string tmp_alias = where_condition_first_alias[0];
+		string which_table_wf = alias_name_to_table.find(tmp_alias)->second;
+		currtable = tables[which_table_wf];
+		string tmp_attr_fir = where_condition_first_attrname[0];
+		int value_fir = currtable-> attrsize[tmp_attr_fir];
+		string tmp_alias_sec = compare_alias_char_first[0];
+		string which_table_ws = alias_name_to_table.find(tmp_alias_sec)->second;
+		currtable_sec = tables[which_table_ws];
+		string tmp_attr_sec = compare_attr_char_first[0];
+		int value_sec = currtable_sec-> attrsize[tmp_attr_sec];
+		
+		if (logical_op.size()==0){
 			if (value_fir ==-1 && value_sec== -1){
-				multimap<int,int>::iterator it,itlow,itup;
+				multimap<int,int>::iterator it;
 				multimap<string,int>::iterator it_var;
+				vector<int> index;
+				vector<int>::iterator index_it;
+				// In order to know which table mapping to another table, we compare each inner_join attribute.
+				set<int> compare_inner_join_i_fir(currtable->attrint[tmp_attr_fir].begin(),currtable->attrint[tmp_attr_fir].end());
+				set<int> compare_inner_join_i_sec(currtable_sec->attrint[tmp_attr_sec].begin(),currtable_sec->attrint[tmp_attr_sec].end());
+				if (compare_inner_join_i_fir.size()!=currtable->attrint[tmp_attr_fir].size()){
+					for(index_it =currtable->attrint[tmp_attr_fir].begin();index_it!= currtable->attrint[tmp_attr_fir].end();++index_it){
+						it = currtable_sec-> attrint_i[tmp_attr_sec].find(*index_it);
+						index.push_back((*it).second);
+					}
+					for(int i =0;i<currtable->rownum;i++){
+						for(int j =0;j<target_list.size();j++){
+							string tmp = target_list[j];
+							int value = target_size[j];
+							if (value == -1){
+								tmp_i = currtable->attrint[tmp];
+								if (attrname_tmp_fir.find(tmp)!=attrname_tmp_fir.end()){
+									int_v.push_back(tmp_i[i]);
+								}else{
+									int tmp_index = index[i];
+									tmp_i = currtable_sec->attrint[tmp];
+									int_v.push_back(tmp_i[i]);
+								}
+								
+							}else {
+								tmp_v = currtable->attrvar[tmp];
+								if(attrname_tmp_fir.find(tmp)!=attrname_tmp_fir.end()){
+									str_v.push_back(tmp_v[i]);
+								}else{
+									int tmp_index = index[i];
+									tmp_v = currtable_sec->attrvar[tmp];
+									str_v.push_back(tmp_v[i]);
+								}
+							}
+						}
+						new_row(selecttable, int_v, str_v);
+						for (int j=0;j<target_list.size();j++){
+							int value = target_size[j];
+							if (value == -1){
+								int_v.pop_front();
+							}else{
+								str_v.pop_front();
+							}
+						}
+					}
+				}else if (compare_inner_join_i_sec.size()!=currtable_sec->attrint[tmp_attr_sec].size()){
+					for(index_it =currtable_sec->attrint[tmp_attr_sec].begin();index_it!= currtable_sec->attrint[tmp_attr_sec].end();++index_it){
+						it = currtable-> attrint_i[tmp_attr_fir].find(*index_it);
+						index.push_back((*it).second);
+					}
+				}
+				
+				
+				/*
 				int target_number = target_size.size();
 				int index_number = index_i.size();
 				for (index_it=index_i.begin(); index_it!= index_i.end(); ++index_it){
@@ -1065,32 +1124,142 @@ void select (lua_State* L)
 					}
 				}
 			}
-			else{
-					
+			else if (value_fir == 30 && value_sec == 30){
 					
 			}
+			else{
+				cout << "error: different types and cannot be compared."<<endl;
+				return;
+			}*/
+			}
 		}
-		else if (value_fir == 30 && value_sec == 30){
+		/*	The flowchart for dealing with the case "AND" condition.
+		*	First, we find the index which is fulfilled with the second where condition.
+		*	Then, we pointed to the value of the inner joined attribute.
+		*	Second, searching the other table with the same value and stored the index.
+		*	Fourthe we printed it.
+		*/
+		if(logical_op[0] == "AND"){
+			string attr_tmp = where_condition_second_attrname[0];
+			string which_table = alias_name_to_table.find(where_condition_second_alias[0])->second;;
+			currtable_tmp = tables[which_table];
+			int value = currtable_tmp->attrsize[attr_tmp];
+			int compare_int;
+			if (value== -1){
+				convert_stoi << compare_alias_char_second[0];
+				convert_stoi >> compare_int;
+				convert_stoi.str("");
+				convert_stoi.clear();
+			}
+			multimap<int,int>::iterator it,itlow,itup;
+			multimap<string,int>::iterator it_var;
+			// The reason why I choose "set" is that it can prohibit the same value to be inserted.
+			set<int> index_i;
+			set<int> :: iterator index_it;
+			// find the indexing value which is corresponding to the first statement.
+			if (value== -1){
+				if (op_flag_second == "eq"){
+					for ( it = currtable_tmp-> attrint_i[attr_tmp].equal_range(compare_int).first; 
+						  it !=currtable_tmp-> attrint_i[attr_tmp].equal_range(compare_int).second; ++it ){
+							  index_i.insert((*it).second);
+						  }
+				}else if (op_flag_second == "gt"){
+					itlow = currtable_tmp-> attrint_i[attr_tmp].lower_bound(compare_int+1);
+					for (it = itlow; it!=currtable_tmp-> attrint_i[attr_tmp].end();++it){
+						index_i.insert((*it).second);
+					}
+				}else {
+					itup = currtable_tmp-> attrint_i[attr_tmp].upper_bound(compare_int-1);
+					for (it = currtable_tmp-> attrint_i[attr_tmp].begin();it!=itup; ++it){
+						index_i.insert((*it).second);
+					}
+				}
+			}else{
+				if (op_flag_second == "eq"){
+					for ( it_var = currtable_tmp-> attrvar_i[attr_tmp].equal_range(compare_alias_char_second[0]).first; 
+						  it_var !=currtable_tmp-> attrvar_i[attr_tmp].equal_range(compare_alias_char_second[0]).second; ++it_var ){
+							  index_i.insert((*it_var).second);
+					}
+				}
+			}
+			// we pointed the index to the value of the inner joined attribute.
+			if (value_fir == -1 && value_sec== -1){
+				inner_join_tmp_i = currtable_tmp->attrint[tmp_attr_fir];
+				for (index_it = index_i.begin(); index_it != index_i.end();++index_it){
+					int tmp_index = *index_it;
+					compare_inner_join_i.push_back(inner_join_tmp_i[tmp_index]);
+				}
+			}else if (value_fir ==30 && value_sec== 30){
+				inner_join_tmp_v = currtable_tmp->attrvar[tmp_attr_fir];
+				for (index_it = index_i.begin(); index_it != index_i.end();++index_it){
+					int tmp_index = *index_it;
+					compare_inner_join_v.push_back(inner_join_tmp_v[tmp_index]);
+				}
+			}else{
+				cout << "error: different types and cannot be compared."<<endl;
+				return;
+			}
+			
+			// The separate line 
+			
+			if (SEL_target[0]=="*"){
+				string which_table;
+				which_table = alias_name_to_table.find(SEL_alias[0])->second;
+				currtable_tmp = tables[which_table];
+				int target_number = currtable_tmp->attrname.size();
+				set<int> index_inner;
+				set<int>::iterator index_inner_it;
 				
+				if (value_fir == -1){
+					for (int i=0;i<compare_inner_join_i.size();i++ ){
+						for ( it = currtable_tmp-> attrint_i[tmp_attr_fir].equal_range(compare_inner_join_i[i]).first; 
+							it !=currtable_tmp-> attrint_i[tmp_attr_fir].equal_range(compare_inner_join_i[i]).second; ++it ){
+								index_inner.insert((*it).second);
+						}
+					}
+				}else if (value_fir == 30){
+					for (int i=0;i<compare_inner_join_v.size();i++ ){
+						string tmp_v = compare_inner_join_v[i];
+						for ( it_var = currtable_tmp-> attrvar_i[tmp_attr_fir].equal_range(tmp_v).first; 
+							it_var !=currtable_tmp-> attrvar_i[tmp_attr_fir].equal_range(tmp_v).second; ++it_var){
+								index_inner.insert((*it).second);
+						}
+					}
+				}
+				
+				for(index_inner_it =index_inner.begin();index_inner_it!= index_inner.end();++index_inner_it){
+					for(int i=0;i<target_number;i++){
+						auto tmp = target_list[i];
+						int value = target_size[i];
+						if (value== -1){
+							tmp_i = currtable_tmp->attrint[tmp];
+							int tmp_index = *index_inner_it;
+							int_v.push_back(tmp_i[tmp_index]);
+						}else {
+							tmp_v = currtable_tmp->attrvar[tmp];
+							int tmp_index = *index_inner_it;
+							str_v.push_back(tmp_v[tmp_index]);
+						}
+					}
+					new_row(selecttable, int_v, str_v);
+					for (int i=0;i<target_number;i++){
+						int value = target_size[i];
+						if (value == -1){
+							int_v.pop_front();
+						}else{
+							str_v.pop_front();
+						}
+					}
+				}
+			}
+			print_table(selecttable);
 		}
-		else{
-			cout << "error: different types and cannot be compared."<<endl;
+		else if (logical_op[0] == "OR"){
+			cout << "error using : " << logical_op[0] << endl;
+			cout << "This is no meaning"<<endl;
 			return;
 		}
-	}
-		else{
-			if(logical_op[0] == "AND"){
-				
-			}else if (logical_op[0]== "OR"){
-				
-			}
-		}
-		
-		
-		
-		
-	}
-	
+	}	
 }
 
 
@@ -1098,8 +1267,7 @@ void select (lua_State* L)
 void print_tables()
 {
     cout << endl << "Tables:" << endl;
-    for(auto it = tables.begin(); it != tables.end(); ++it)
-    {
+    for(auto it = tables.begin(); it != tables.end(); ++it){
         // Print table name
         cout << "[" << it->first << "]" << endl;
         auto table = it->second;
